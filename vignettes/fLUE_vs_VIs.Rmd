@@ -7,17 +7,21 @@ output: html_document
 
 ```{r}
 library(reactable)
-
+library(tidymodels)
+library(ranger)
+library(caret)
+library(reactable)
+library(readr)
+library(forcats)
+source(here::here("R/calc_VI.R"))
+source(here::here("R/index_flue.R"))
 
 
 ```
 
 ```{r setup, include=FALSE}
 
-model <- readRDS("data/model_rf.rds")
-
-
-set.seed(0)
+model <- readRDS(here::here("data/model_rf.rds"))
 
 #new table indices 
 # Select the drought vegetation indices
@@ -29,11 +33,16 @@ set.seed(0)
 
 # Load the spectral indices file
 # # select the indices used for drought monitoring
+#select also NDWI
+#change application domain t vegetation 
 vi <- read_csv(here::here("data/spectral-indices-table.csv")) |>
-  filter(short_name %in% c("NDVI", "EVI", "ARVI", "SAVI", "GVMI", "NDDI", "NDGI", "GNDWI", "RVI", "MSI")) |>
-  select(short_name, formula, application_domain)
-# 
-# #add new indices from literature
+  filter(short_name %in% c("NDVI", "EVI", "ARVI", "SAVI", "GVMI", "NDDI", "NDGI", "GNDWI", "RVI", "MSI", "NDWI")) |>
+  select(short_name, formula, application_domain)|>
+  mutate(
+    application_domain = if_else(short_name == "NDWI", "vegetation", application_domain)
+  )
+
+#add new indices from literature
 new_indices <- tibble(
   short_name = c("VSDI", "SIRR", "LSWI"),
   formula = c("1 - ((S1 - B) + (R - B))", "S1/S2", "(N - S1) / (N + S1)"),
@@ -42,7 +51,7 @@ new_indices <- tibble(
 #   
 vi <- vi %>%
   mutate(formula = ifelse(short_name == "RVI", "N / R", formula),
-         formula = ifelse(short_name == "NDGI", "(N - G) / (N + G)", formula),
+         #formula = ifelse(short_name == "NDGI", "(N - G) / (N + G)", formula),
          #formula = ifelse(short_name == "LSWI", "(N - S1) / (N + S1)", formula),
          formula = ifelse(short_name == "ARVI", "(N - 2*R + B) / (N + 2*R - B)", formula))
 #          
@@ -94,20 +103,6 @@ combined <- dplyr::left_join(df,preds,
                              by = c("site", "date"))
 
 
-# create a data split across
-# across both droughted and non-droughted days
-# ml_df_split <- ml_df |>
-#   rsample::initial_split(
-#     strata = is_flue_drought,
-#     prop = 0.8
-#   )
-# 
-# # select training and testing
-# # data based on this split
-# train <- rsample::training(ml_df_split) |>
-#   dplyr::select(-is_flue_drought)
-# test <- rsample::testing(ml_df_split) |>
-#   dplyr::select(-is_flue_drought)
 
 #read in precompiled model
 model <- readRDS(
@@ -143,28 +138,6 @@ df1|>
   ) |>
   reactable::reactable()
 
-
-# # read in precompiled model
-# regression_model <- readRDS(
-#   here::here("data/regression_model_spatial_MODIS.rds")
-#   )
-# 
-# # run the model on our test data
-# # using predict()
-# test_results <- predict(
-#   regression_model,
-#   test)$.pred
-# 
-# df <- data.frame(
-#   test,
-#   flue_predicted = test_results
-#   )
-
-# unique(test$site)
-# unique(train$site)
-# 
-# unique(test$date)
-# unique(train$date)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
@@ -181,6 +154,10 @@ df2 <- combined |>
     -mtry, -splitrule, -rowIndex, -Resample, -min.node.size, -obs
   )
 colnames(df2)
+
+max(df2$flue)
+max(df2$flue_predicted)
+max(df2$NDVI)
 
 df_long <- df2 |>
   pivot_longer(
@@ -273,126 +250,7 @@ print(p)
 
 Which one performs best?
 
-```{r}
-# best_ind <- rsq |> 
-#   filter(cluster != "cNA") |> 
-#   group_by(index) |> 
-#   summarise(rsq = median(rsq)) |> 
-#   arrange(desc(rsq)) |> 
-#   # dplyr::slice(1:10) |> 
-#   pull(index)
-# 
-# cluster_labels <- rsq |> 
-#   filter(index %in% best_ind, cluster != "cNA") |> 
-#   group_by(cluster) |> 
-#   summarise(rsq = max(rsq) * 0.9) 
-# 
-# 
-# # Create the plot
-# p1 <- rsq |> 
-#   filter(index %in% best_ind, cluster != "cNA") |> 
-#   mutate(index = fct_reorder(index, rsq, .fun = "mean")) |> 
-#   ggplot(aes(x = reorder(index, desc(rsq)), y = rsq, fill = flue)) +
-#   
-#   # Boxplot with custom colors
-#   geom_boxplot(color = "black", outlier.color = "black", outlier.shape = 16) +
-#   geom_jitter(position = position_jitter(width = 0.2, height = 0), 
-#               size = 3, alpha = 0.5, color = "black") +
-#   
-#   # Facet wrap for clusters
-#   facet_wrap(~cluster, nrow = 10) +
-#   # scale_fill_viridis_d(option = "plasma") +
-#   scale_fill_manual(values = c("fLUE_predicted" = "#B57114", "VI" = "#025939")) +  
-#   
-#   # Background shading for the first facet
-#   theme_bw(base_size = 14, base_rect_size = 0.8) +
-#   theme(
-#     strip.text = element_blank(), 
-#     panel.grid.major = element_blank(),  # Removes major grid lines
-#     panel.grid.minor = element_blank(), 
-#     axis.text = element_text(color = "black", size = 14),# Removes minor grid line# Remove facet titles
-#     axis.text.x = element_text(angle = 0, hjust = 0.5, size = 13), 
-#     axis.text.y = element_text( size = 16),
-#     axis.title.x = element_text(size= 14), 
-#     axis.title.y = element_text(size= 20),# Rotate x-axis labels
-#     legend.position = "none" # Remove legend
-#   ) +
-#   
-#   # Add cluster labels inside the plot using a separate dataset
-#   geom_text(data = cluster_labels, 
-#             aes(x = 12, y = 0.8, label = cluster), # Adjust x-position for readability
-#             inherit.aes = FALSE, 
-#             color = "black", size = 7, fontface = "bold") +
-#   
-#   # Labels
-#   labs(x = NULL, y = "R²")   
-# 
-# print(p1)
-# # p+p1+
-# #   plot_layout(ncol = 2)+
-# #   plot_annotation(tag_levels = "a",
-# #                   tag_prefix = "(",
-# #                   tag_suffix = ")"
-# #                   )
-# # 
-# # library(patchwork)
-# # 
-# # p_wrapped <- wrap_elements(full = p) + wrap_elements(full = p1) + 
-# #   plot_layout(ncol = 1, heights = c(1.5, 3))  # Adjust widths per figure
-# # 
-# # p_wrapped + plot_annotation(tag_levels = "a",  tag_prefix = "(",
-# #                   tag_suffix = ")")
-# 
-# #ggsave("manuscript/flue_VI_10.png", width = 8, height = 6, dpi =700)
-# # 
-# # top_indices <- read_csv(here::here("data/spectral-indices-table.csv"))|>
-# #   filter(short_name %in% c("SI", "TVI", "BNDVI", "GRNDVI", "NormNIR", "AFRI2100", "MNDVI", "GRVI", "SR2"))
-# #                      
-# # write.table(top_indices,here::here("data/top_indices.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
-# 
-# ggsave("manuscript/Version1/flue_VI12_1.png", width =11, height = 12 , dpi =700)
-# 
-# 
-# p1 <- rsq |> 
-#   filter(index %in% best_ind, cluster != "cNA") |> 
-#   mutate(index = fct_reorder(index, rsq, .fun = "mean")) |> 
-#   ggplot(aes(x = reorder(index, desc(rsq)), y = rsq, fill = flue)) +
-#   
-#   # Boxplot with custom colors
-#   geom_boxplot(color = "black", outlier.color = "black", outlier.shape = 16, alpha = 0.7) +
-#   
-#   # Jittered points to show individual observations
-#   geom_jitter(position = position_jitter(width = 0.2, height = 0), 
-#               size = 3, alpha = 0.6, color = "black") +
-#   
-#   # Facet wrap for clusters
-#   facet_wrap(~cluster, nrow = 10, scales = "free_y") +
-#   
-#   # Color scale
-#   scale_fill_manual(values = c("fLUE_predicted" = "#B57114", "VI" = "#706513")) +  
-#   
-#   # Adding title and axis labels
-#   labs(title = "Boxplot with Jittered Observations",
-#        x = "Index",
-#        y = "R-squared Value") +
-#   
-#   # Background shading for the first facet
-#   theme_bw(base_size = 14, base_rect_size = 0.8) +
-#   theme(
-#     strip.text = element_blank(), 
-#     panel.grid.major = element_line(color = "grey90"),  # Subtle grid lines
-#     panel.grid.minor = element_blank(), 
-#     axis.text = element_text(color = "black", size = 14),
-#     axis.text.x = element_text(angle = 45, hjust = 1, size = 13),  # Angle x-axis labels
-#     axis.text.y = element_text(size = 16),
-#     axis.title.x = element_text(size = 14), 
-#     axis.title.y = element_text(size = 20),
-#     legend.position = "none"  # Remove legend
-#   )
-# 
-# # Print the plot
-# print(p1)
-```
+
 only cDD and cGR
 
 
