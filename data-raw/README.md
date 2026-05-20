@@ -12,4 +12,4 @@ https://github.com/geco-bern/cwd_global/branches/full-resolution-ERA5-2018-2020`
 from this full resolution recalculated pcwd, we extracted data for cemtrale europe 
 for model upscaling. 
 
-all the rasters data output are stored in ubelix in directory : "storage/capacity/occr_geco/data/archive_projects/index_based_physiological_drought"
+all the rasters data output are stored in directory : "~/archive_projects/index_based_physiological_drought"

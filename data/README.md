@@ -36,7 +36,7 @@ the `analysis` folder and output is called, `model_rf.rds`  for the regression.
 
 predicted flue rasters for centrale europe, after preparing and stucking downloaded 
 rasters predictors `analysis/06yousra_spatial_upscaling_centrale_europe.R`
-these rasters are stored in ubelix in directory : "storage/capacity/occr_geco/data/archive_projects/index_based_physiological_drought"
+
 
 ### Annotated manuscript
 
